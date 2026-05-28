@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Stunden-Check-in</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      background: #eef2f7; color: #1a202c;
+      min-height: 100vh; padding: 14px;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+      color: white; padding: 14px 18px; border-radius: 14px;
+      margin-bottom: 16px; display: flex;
+      align-items: center; justify-content: space-between;
+    }
+    header .meta { font-size: 0.78rem; opacity: 0.8; margin-bottom: 2px; }
+    header h1 { font-size: 1.15rem; font-weight: 700; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .sync-indicator {
+      font-size: 0.7rem; opacity: 0.75; text-align: right; line-height: 1.3;
+    }
+    .header-gear {
+      background: rgba(255,255,255,0.15); border: none; border-radius: 8px;
+      color: white; font-size: 1.1rem; cursor: pointer;
+      padding: 6px 10px; min-height: 36px; transition: background 0.12s;
+    }
+    .header-gear:hover { background: rgba(255,255,255,0.25); }
+
+    /* ── Lade-Spinner ── */
+    .loading-card {
+      background: white; border-radius: 14px; padding: 28px 18px;
+      text-align: center; box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+      margin-bottom: 14px;
+    }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid #e2e8f0;
+      border-top-color: #1d4ed8; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-card p { color: #64748b; font-size: 0.9rem; }
+
+    /* ── Import-Banner (wenn kein Plan vorhanden) ── */
+    .import-banner {
+      background: white; border-radius: 14px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+      margin-bottom: 16px; overflow: hidden;
+    }
+    .import-banner-head {
+      background: linear-gradient(135deg, #0f766e, #0d9488);
+      padding: 14px 18px; color: white;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .import-banner-head .ib-icon { font-size: 1.4rem; }
+    .import-banner-head h2 { font-size: 1rem; font-weight: 700; }
+    .import-banner-head p  { font-size: 0.78rem; opacity: 0.85; margin-top: 2px; }
+    .import-banner-body { padding: 16px 18px; }
+    .import-hint {
+      font-size: 0.8rem; color: #64748b; margin-bottom: 10px; line-height: 1.6;
+      background: #f8fafc; border-radius: 8px; padding: 10px 12px;
+    }
+    .import-hint code { background: #e2e8f0; border-radius: 4px; padding: 1px 5px; font-size: 0.75rem; }
+    .import-ta {
+      width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0;
+      border-radius: 10px; font-size: 0.82rem; min-height: 100px;
+      font-family: monospace; margin-bottom: 10px; resize: vertical;
+    }
+    .import-ta:focus { outline: none; border-color: #0d9488; }
+    .imp-btn {
+      width: 100%; padding: 14px; background: #0f766e; color: white;
+      border: none; border-radius: 10px; font-size: 0.95rem;
+      font-weight: 700; cursor: pointer; min-height: 48px; transition: background 0.12s;
+    }
+    .imp-btn:hover { background: #0d9488; }
+
+    /* ── Reimport (klein, wenn Plan vorhanden) ── */
+    .reimport-wrap { margin-top: 14px; }
+    .reimport-tog {
+      background: none; border: none; font-size: 0.78rem; color: #94a3b8;
+      cursor: pointer; display: flex; align-items: center; gap: 5px;
+      min-height: 36px; padding: 0 4px;
+    }
+    .reimport-tog:hover { color: #64748b; }
+    .reimport-body { display: none; margin-top: 8px; }
+    .reimport-body.open { display: block; }
+    .reimport-ta {
+      width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0;
+      border-radius: 10px; font-size: 0.78rem; min-height: 80px;
+      font-family: monospace; margin-bottom: 8px;
+    }
+    .reimp-btn {
+      padding: 9px 18px; background: #0f766e; color: white;
+      border: none; border-radius: 8px; font-size: 0.85rem;
+      font-weight: 700; cursor: pointer; min-height: 40px;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: white; border-radius: 14px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+      margin-bottom: 14px; overflow: hidden;
+    }
+    .card-header {
+      padding: 14px 18px; border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    }
+    .card-meta .fach-tag { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #6b7280; }
+    .card-meta .klasse   { font-size: 1.2rem; font-weight: 800; color: #0f172a; margin: 2px 0; }
+    .card-meta .typ      { font-size: 0.82rem; color: #94a3b8; }
+    .ka-chip {
+      display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 20px;
+      background: #ede9fe; color: #6d28d9; font-size: 0.7rem; font-weight: 700; vertical-align: middle;
+    }
+    .toggle-group { display: flex; gap: 6px; flex-shrink: 0; }
+    .tog {
+      padding: 8px 13px; border: 2px solid #e2e8f0; border-radius: 10px;
+      background: white; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; transition: all 0.12s; min-height: 44px; white-space: nowrap;
+    }
+    .tog.on-ja  { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+    .tog.on-weg { background: #fee2e2; border-color: #dc2626; color: #dc2626; }
+
+    .card-body { padding: 16px 18px; }
+    .placeholder-msg { color: #94a3b8; font-size: 0.88rem; text-align: center; padding: 6px 0; }
+    .gone-box {
+      background: #fff1f2; border: 2px solid #fecaca; border-radius: 10px;
+      padding: 14px; text-align: center; color: #dc2626; font-weight: 700; font-size: 0.9rem;
+    }
+
+    /* ── Sections ── */
+    .sec { margin-bottom: 20px; }
+    .sec:last-child { margin-bottom: 0; }
+    .sec-title {
+      font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 10px;
+    }
+    .empty-hint { font-size: 0.83rem; color: #cbd5e1; font-style: italic; padding: 4px 0; }
+
+    /* ── Checkboxen ── */
+    .cb-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-radius: 10px; cursor: pointer;
+      margin-bottom: 6px; transition: background 0.1s; min-height: 44px; user-select: none;
+    }
+    .cb-row:hover { background: #f8fafc; }
+    .cb-row.cb-checked-row { background: #f0fdf4; }
+    .cb-box {
+      width: 26px; height: 26px; flex-shrink: 0;
+      border: 2.5px solid #cbd5e1; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.95rem; font-weight: 900; color: white;
+      transition: all 0.14s; background: white;
+    }
+    .cb-box.cb-on { background: #16a34a; border-color: #16a34a; }
+    .cb-label { font-size: 0.92rem; color: #374151; flex: 1; line-height: 1.35; }
+    .cb-label.cb-done { text-decoration: line-through; color: #9ca3af; }
+
+    /* ── Kompetenz ── */
+    .komp-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 20px;
+      background: #dbeafe; color: #1d4ed8; font-weight: 700; font-size: 0.88rem;
+    }
+    .komp-empty { color: #cbd5e1; font-size: 0.85rem; font-style: italic; padding: 4px 0; }
+
+    /* ── Notizen ── */
+    .notes-ta {
+      width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0;
+      border-radius: 10px; font-size: 0.92rem; min-height: 76px;
+      resize: vertical; font-family: inherit;
+    }
+    .notes-ta:focus { outline: none; border-color: #2563eb; }
+
+    /* ── Senden ── */
+    .send-btn {
+      width: 100%; padding: 17px; background: #1e40af;
+      color: white; border: none; border-radius: 14px;
+      font-size: 1.05rem; font-weight: 800; cursor: pointer;
+      margin-top: 10px; min-height: 58px; letter-spacing: 0.02em;
+      transition: background 0.12s;
+    }
+    .send-btn:hover  { background: #1d4ed8; }
+    .send-btn:active { background: #1e3a8a; }
+
+    .no-lessons {
+      background: white; border-radius: 14px; padding: 36px;
+      text-align: center; color: #94a3b8; font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ════════════════════════════════════════════
+// KONFIGURATION
+// ════════════════════════════════════════════
+const GITHUB_USER = 'nibo91';
+const GITHUB_REPO = 'stunden-checkin';
+const PLAN_FILE   = 'today-plan.json';
+
+const WOCHENPLAN = {
+  1: [
+    { klasse: '8bc', fach: 'Spanisch', typ: 'Einzelstunde' },
+    { klasse: 'Q1',  fach: 'Spanisch', typ: 'Einzelstunde' }
+  ],
+  2: [{ klasse: '9ab', fach: 'Spanisch', typ: 'Doppelstunde' }],
+  3: [{ klasse: '8bc', fach: 'Spanisch', typ: 'Doppelstunde' }],
+  4: [{ klasse: '8bc', fach: 'Spanisch', typ: 'Einzelstunde' }],
+  5: [{ klasse: '9ab', fach: 'Spanisch', typ: 'Doppelstunde' }]
+};
+const Q1_DO_NEXT = new Date('2026-06-18');
+
+let KA_STAND = JSON.parse(localStorage.getItem('ka_stand') || JSON.stringify({
+  '8bc': { nr: 3, kompetenz: 'Sprachmittlung' },
+  '9ab': { nr: 2, kompetenz: 'Mündl. Kommunikationsprüfung' },
+  'Q1':  null
+}));
+
+// ════════════════════════════════════════════
+// HILFSFUNKTIONEN
+// ════════════════════════════════════════════
+function heute() { return new Date(); }
+function datumsKey(d) {
+  d = d || heute();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+function formatDatum(d) {
+  const T = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+  const M = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  return T[d.getDay()] + ', ' + d.getDate() + '. ' + M[d.getMonth()] + ' ' + d.getFullYear();
+}
+function istQ1Donnerstag() {
+  const h = heute();
+  if (h.getDay() !== 4) return false;
+  const ms2W = 14 * 24 * 60 * 60 * 1000;
+  return Math.round((Q1_DO_NEXT - h) / ms2W) % 2 === 0;
+}
+function heutigeStunden() {
+  const dow = heute().getDay();
+  const st = [...(WOCHENPLAN[dow] || [])];
+  if (dow === 4 && istQ1Donnerstag())
+    st.push({ klasse: 'Q1', fach: 'Spanisch', typ: 'Einzelstunde' });
+  return st;
+}
+
+// ════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════
+const STATE_KEY = 'checkin_' + datumsKey();
+const PLAN_KEY  = 'plan_'    + datumsKey();
+
+let STATE = (() => { try { return JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch { return {}; } })();
+let PLAN  = (() => { try { return JSON.parse(localStorage.getItem(PLAN_KEY))  || {}; } catch { return {}; } })();
+
+let syncStatus = ''; // 'loading' | 'ok' | 'error' | 'stale' | ''
+
+function planVorhanden() {
+  return Object.keys(PLAN).filter(k => !k.startsWith('_')).some(k =>
+    (PLAN[k].aufgaben || PLAN[k].sbAufgaben || []).length > 0 ||
+    (PLAN[k].grammatik || []).length > 0 ||
+    PLAN[k].kompetenz
+  );
+}
+
+function saveState() { try { localStorage.setItem(STATE_KEY, JSON.stringify(STATE)); } catch {} }
+
+function applyPlan(plan) {
+  Object.keys(plan).filter(k => !k.startsWith('_')).forEach(k => {
+    STATE[k] = {
+      stattgefunden: STATE[k] ? STATE[k].stattgefunden : null,
+      aufgaben: (plan[k].aufgaben || plan[k].sbAufgaben || []).map(a => ({ label: a, done: false })),
+      gram:     (plan[k].grammatik || []).map(g => ({ label: g, done: false })),
+      komp:     plan[k].kompetenz || '',
+      notiz:    STATE[k] ? (STATE[k].notiz || '') : ''
+    };
+  });
+  if (plan._ka) {
+    KA_STAND = plan._ka;
+    localStorage.setItem('ka_stand', JSON.stringify(KA_STAND));
+  }
+  localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
+  PLAN = plan;
+  saveState();
+}
+
+function initKlasse(klasse) {
+  if (STATE[klasse]) return;
+  const p = PLAN[klasse] || {};
+  STATE[klasse] = {
+    stattgefunden: null,
+    aufgaben: (p.aufgaben || p.sbAufgaben || []).map(a => ({ label: a, done: false })),
+    gram:     (p.grammatik || []).map(g => ({ label: g, done: false })),
+    komp:     p.kompetenz || '',
+    notiz:    ''
+  };
+  saveState();
+}
+
+// ════════════════════════════════════════════
+// GITHUB FETCH
+// ════════════════════════════════════════════
+async function fetchPlanFromGitHub() {
+  syncStatus = 'loading';
+  renderHeader();
+  try {
+    const url = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${PLAN_FILE}?nocache=${datumsKey()}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const plan = await resp.json();
+
+    if (plan._date === datumsKey()) {
+      applyPlan(plan);
+      syncStatus = 'ok';
+    } else {
+      // Datei existiert, aber gehört nicht zu heute
+      syncStatus = 'stale';
+    }
+  } catch (e) {
+    syncStatus = 'error';
+  }
+  render();
+}
+
+// ════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════
+function renderHeader() {
+  const existing = document.querySelector('header');
+  if (!existing) return;
+  const syncHtml = {
+    'loading': '<div class="sync-indicator">⏳ Lade Plan…</div>',
+    'ok':      '<div class="sync-indicator">✅ Plan geladen</div>',
+    'stale':   '<div class="sync-indicator">⚠️ Plan veraltet</div>',
+    'error':   '<div class="sync-indicator">❌ Keine Verbindung</div>',
+    '':        ''
+  }[syncStatus] || '';
+
+  existing.innerHTML = `
+    <div>
+      <div class="meta">${formatDatum(heute())}</div>
+      <h1>Stunden-Check-in</h1>
+    </div>
+    <div class="header-right">
+      ${syncHtml}
+      ${planVorhanden() ? `<button class="header-gear" title="Planung neu laden" onclick="fetchPlanFromGitHub()">🔄</button>` : ''}
+    </div>`;
+}
+
+function render() {
+  const stunden = heutigeStunden();
+  stunden.forEach(s => initKlasse(s.klasse));
+
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  // Header
+  const hd = document.createElement('header');
+  app.appendChild(hd);
+  renderHeader();
+
+  // Noch beim Laden?
+  if (syncStatus === 'loading') {
+    const lc = document.createElement('div');
+    lc.className = 'loading-card';
+    lc.innerHTML = '<div class="spinner"></div><p>Heutige Planung wird geladen…</p>';
+    app.appendChild(lc);
+    return;
+  }
+
+  // Kein Plan → Import-Banner
+  if (!planVorhanden()) {
+    renderImportBanner(app);
+  }
+
+  if (!stunden.length) {
+    const nl = document.createElement('div');
+    nl.className = 'no-lessons';
+    nl.textContent = 'Heute keine Spanisch-Stunden im Plan. 🎉';
+    app.appendChild(nl);
+    return;
+  }
+
+  stunden.forEach(s => renderKarte(app, s));
+
+  if (planVorhanden()) {
+    // Kleiner Reimport-Link
+    const rw = document.createElement('div');
+    rw.className = 'reimport-wrap';
+    rw.innerHTML = `
+      <button class="reimport-tog" onclick="document.getElementById('reimport-body').classList.toggle('open')">
+        ⚙️ Planung manuell überschreiben
+      </button>
+      <div class="reimport-body" id="reimport-body">
+        <textarea class="reimport-ta" id="reimp-ta" placeholder='{"_date":"${datumsKey()}","8bc":{"aufgaben":["S.55 A3"],"grammatik":[],"kompetenz":"Leseverstehen"}}'></textarea>
+        <button class="reimp-btn" onclick="doImport('reimp-ta')">📥 Importieren</button>
+      </div>`;
+    app.appendChild(rw);
+
+    const btn = document.createElement('button');
+    btn.className = 'send-btn';
+    btn.textContent = '📤  Protokoll an Claude senden';
+    btn.onclick = absenden;
+    app.appendChild(btn);
+  }
+}
+
+function renderImportBanner(container) {
+  const errorMsg = syncStatus === 'error'
+    ? '<div style="background:#fff1f2;border:1.5px solid #fecaca;border-radius:8px;padding:9px 12px;font-size:0.8rem;color:#dc2626;margin-bottom:10px;">⚠️ Verbindung zu GitHub fehlgeschlagen. Plan manuell einfügen:</div>'
+    : syncStatus === 'stale'
+    ? '<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;padding:9px 12px;font-size:0.8rem;color:#92400e;margin-bottom:10px;">⚠️ Die Datei im Repo enthält keinen Plan für heute. Manuell einfügen:</div>'
+    : '';
+
+  const banner = document.createElement('div');
+  banner.className = 'import-banner';
+  banner.innerHTML = `
+    <div class="import-banner-head">
+      <span class="ib-icon">📋</span>
+      <div>
+        <h2>Heutige Planung importieren</h2>
+        <p>Normalerweise automatisch — heute manuell</p>
+      </div>
+    </div>
+    <div class="import-banner-body">
+      ${errorMsg}
+      <div class="import-hint">
+        Format: <code>{"_date":"${datumsKey()}","8bc":{"aufgaben":["S.55 A3"],"grammatik":[],"kompetenz":"Leseverstehen"}}</code>
+      </div>
+      <textarea class="import-ta" id="imp-ta" placeholder='{"_date":"${datumsKey()}", "8bc": { ... }}'></textarea>
+      <button class="imp-btn" onclick="doImport('imp-ta')">📥 Planung importieren</button>
+    </div>`;
+  container.appendChild(banner);
+}
+
+function renderKarte(container, stunde) {
+  const k  = stunde.klasse;
+  const s  = STATE[k];
+  const ka = KA_STAND[k];
+  const card = document.createElement('div');
+  card.className = 'card'; card.id = 'card-' + k;
+
+  const ch = document.createElement('div');
+  ch.className = 'card-header';
+  ch.innerHTML = `
+    <div class="card-meta">
+      <div class="fach-tag">${stunde.fach}</div>
+      <div class="klasse">Klasse ${k}${ka ? `<span class="ka-chip">KA ${ka.nr}: ${ka.kompetenz}</span>` : ''}</div>
+      <div class="typ">${stunde.typ}</div>
+    </div>
+    <div class="toggle-group">
+      <button class="tog ${s.stattgefunden === true  ? 'on-ja'  : ''}" onclick="setStattgefunden('${k}',true)">✅ Ja</button>
+      <button class="tog ${s.stattgefunden === false ? 'on-weg' : ''}" onclick="setStattgefunden('${k}',false)">❌ Ausgefallen</button>
+    </div>`;
+  card.appendChild(ch);
+
+  const cb = document.createElement('div');
+  cb.className = 'card-body'; cb.id = 'body-' + k;
+  if (s.stattgefunden === false)     cb.innerHTML = '<div class="gone-box">Stunde ausgefallen — kein Eintrag</div>';
+  else if (s.stattgefunden === true) renderBody(cb, k);
+  else                               cb.innerHTML = '<p class="placeholder-msg">Bitte oben auswählen ↑</p>';
+  card.appendChild(cb);
+  container.appendChild(card);
+}
+
+function renderBody(container, k) {
+  const s = STATE[k];
+  container.innerHTML = '';
+
+  const aufDiv = document.createElement('div');
+  aufDiv.className = 'sec';
+  aufDiv.innerHTML = '<div class="sec-title">📖 Aufgaben</div>';
+  if (!s.aufgaben.length) {
+    aufDiv.innerHTML += '<div class="empty-hint">Keine Aufgaben hinterlegt</div>';
+  } else {
+    s.aufgaben.forEach((item, i) =>
+      aufDiv.appendChild(mkCbRow(item.label, item.done, () => toggleItem(k, 'aufgaben', i))));
+  }
+  container.appendChild(aufDiv);
+
+  if (s.gram.length > 0) {
+    const grDiv = document.createElement('div');
+    grDiv.className = 'sec';
+    grDiv.innerHTML = '<div class="sec-title">📝 Grammatik</div>';
+    s.gram.forEach((item, i) =>
+      grDiv.appendChild(mkCbRow(item.label, item.done, () => toggleItem(k, 'gram', i))));
+    container.appendChild(grDiv);
+  }
+
+  const kpDiv = document.createElement('div');
+  kpDiv.className = 'sec';
+  kpDiv.innerHTML = '<div class="sec-title">🎯 Kompetenz</div>';
+  kpDiv.innerHTML += s.komp
+    ? `<span class="komp-chip">🎯 ${s.komp}</span>`
+    : '<div class="komp-empty">Nicht angegeben</div>';
+  container.appendChild(kpDiv);
+
+  const ntDiv = document.createElement('div');
+  ntDiv.className = 'sec';
+  ntDiv.innerHTML = '<div class="sec-title">💬 Notizen (optional)</div>';
+  const ta = document.createElement('textarea');
+  ta.className = 'notes-ta';
+  ta.placeholder = 'z.B. Zeitprobleme, Abweichungen, Besonderheiten…';
+  ta.value = s.notiz || '';
+  ta.oninput = e => { STATE[k].notiz = e.target.value; saveState(); };
+  ntDiv.appendChild(ta);
+  container.appendChild(ntDiv);
+}
+
+function mkCbRow(label, checked, onClick) {
+  const row = document.createElement('div');
+  row.className = 'cb-row' + (checked ? ' cb-checked-row' : '');
+  row.onclick = onClick;
+  row.innerHTML = `
+    <div class="cb-box${checked ? ' cb-on' : ''}">${checked ? '✓' : ''}</div>
+    <span class="cb-label${checked ? ' cb-done' : ''}">${label}</span>`;
+  return row;
+}
+
+function refreshBody(k) {
+  const el = document.getElementById('body-' + k);
+  if (el && STATE[k].stattgefunden === true) renderBody(el, k);
+}
+
+// ════════════════════════════════════════════
+// AKTIONEN
+// ════════════════════════════════════════════
+function setStattgefunden(k, val) {
+  STATE[k].stattgefunden = val; saveState(); render();
+}
+function toggleItem(k, typ, i) {
+  STATE[k][typ][i].done = !STATE[k][typ][i].done; saveState(); refreshBody(k);
+}
+function doImport(taId) {
+  const ta = document.getElementById(taId);
+  if (!ta) return;
+  try {
+    const plan = JSON.parse(ta.value.trim());
+    applyPlan(plan);
+    syncStatus = 'ok';
+    render();
+  } catch(e) { alert('❌ Fehler: ' + e.message); }
+}
+
+// ════════════════════════════════════════════
+// ABSENDEN
+// ════════════════════════════════════════════
+function absenden() {
+  const stunden = heutigeStunden();
+  let msg = `[VERLAUF-CHECK-IN] ${datumsKey()}\n\n`;
+  stunden.forEach(st => {
+    const k = st.klasse; const s = STATE[k];
+    msg += `━━━ ${st.fach} · Klasse ${k} · ${st.typ} ━━━\n`;
+    if (s.stattgefunden === false) { msg += 'Status: ❌ Ausgefallen\n\n'; return; }
+    if (s.stattgefunden !== true)  { msg += 'Status: (nicht angegeben)\n\n'; return; }
+    msg += 'Status: ✅ Stattgefunden\n';
+    if (s.aufgaben.length) { msg += '\nAufgaben:\n'; s.aufgaben.forEach(it => msg += `  ${it.done ? '✅' : '○'} ${it.label}\n`); }
+    if (s.gram.length)     { msg += '\nGrammatik:\n'; s.gram.forEach(it => msg += `  ${it.done ? '✅' : '○'} ${it.label}\n`); }
+    if (s.komp)  msg += `\nKompetenz: ${s.komp}\n`;
+    if (s.notiz) msg += `\nNotizen: ${s.notiz}\n`;
+    msg += '\n';
+  });
+  navigator.clipboard.writeText(msg)
+    .then(() => alert('✅ Protokoll kopiert! In Claude einfügen.'))
+    .catch(() => alert('Bitte manuell kopieren:\n\n' + msg));
+}
+
+// ════════════════════════════════════════════
+// INIT — erst Render, dann GitHub-Fetch
+// ════════════════════════════════════════════
+if (planVorhanden()) {
+  // Bereits im localStorage → sofort anzeigen, dann im Hintergrund prüfen
+  render();
+  fetchPlanFromGitHub();
+} else {
+  // Kein lokaler Plan → Ladescreen + GitHub-Fetch
+  render();
+  fetchPlanFromGitHub();
+}
+</script>
+</body>
+</html>
